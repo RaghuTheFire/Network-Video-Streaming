@@ -1,33 +1,30 @@
-// UDP Video Streamer
-#include <iostream>
-#include <cstring>
-#include <sys/socket.h>
-#include <arpa/inet.h>
-#include <unistd.h>
-#include <opencv2/opencv.hpp>
 
-void streamVideo(const char* serverIP, int serverPort) 
+#include <opencv2/opencv.hpp>
+#include <opencv2/videoio.hpp>
+#include <arpa/inet.h>
+#include <sys/socket.h>
+#include <unistd.h>
+
+int main() 
 {
+    cv::VideoCapture cap(0); // Open the default camera
+    if (!cap.isOpened()) 
+    {
+        std::cerr << "Failed to open camera" << std::endl;
+        return -1;
+    }
+
     int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
     if (sockfd < 0) 
     {
         std::cerr << "Failed to create socket" << std::endl;
-        return;
+        return -1;
     }
 
-    struct sockaddr_in serverAddr;
-    memset(&serverAddr, 0, sizeof(serverAddr));
-    serverAddr.sin_family = AF_INET;
-    serverAddr.sin_port = htons(serverPort);
-    inet_pton(AF_INET, serverIP, &serverAddr.sin_addr);
-
-    cv::VideoCapture cap(0);
-    if (!cap.isOpened()) 
-    {
-        std::cerr << "Failed to open camera" << std::endl;
-        close(sockfd);
-        return;
-    }
+    sockaddr_in servaddr;
+    servaddr.sin_family = AF_INET;
+    servaddr.sin_port = htons(8080); // Set the destination port
+    servaddr.sin_addr.s_addr = inet_addr("127.0.0.1"); // Set the destination IP address
 
     cv::Mat frame;
     std::vector<uchar> buffer;
@@ -40,23 +37,13 @@ void streamVideo(const char* serverIP, int serverPort)
             break;
         }
 
-        std::vector<int> params = {cv::IMWRITE_JPEG_QUALITY, 80};
+        std::vector<int> params = {cv::IMWRITE_JPEG_QUALITY, 90};
         cv::imencode(".jpg", frame, buffer, params);
 
-        int bytesSent = sendto(sockfd, buffer.data(), buffer.size(), 0,(struct sockaddr*)&serverAddr, sizeof(serverAddr));
-        if (bytesSent < 0) 
-        {
-            std::cerr << "Failed to Send data" << std::endl;
-            break;
-        }
+        sendto(sockfd, buffer.data(), buffer.size(), 0, (sockaddr*)&servaddr, sizeof(servaddr));
     }
 
-    cap.release();
     close(sockfd);
+    cap.release();
+    return 0;
 }
-
-void main()
-{
-  streamVideo("127.0.0.1, 2556); 
-}
-
