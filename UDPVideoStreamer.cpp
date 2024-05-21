@@ -43,7 +43,12 @@ void streamVideo(const char* serverIP, int serverPort)
         std::vector<int> params = {cv::IMWRITE_JPEG_QUALITY, 80};
         cv::imencode(".jpg", frame, buffer, params);
 
-        sendto(sockfd, buffer.data(), buffer.size(), 0,(struct sockaddr*)&serverAddr, sizeof(serverAddr));
+        int bytesSent = sendto(sockfd, buffer.data(), buffer.size(), 0,(struct sockaddr*)&serverAddr, sizeof(serverAddr));
+        if (bytesSent < 0) 
+        {
+            std::cerr << "Failed to Send data" << std::endl;
+            break;
+        }
     }
 
     cap.release();
