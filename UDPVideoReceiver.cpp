@@ -1,61 +1,78 @@
-// UDP Video Receiver
+
 #include <iostream>
-#include <cstring>
+#include <opencv2/opencv.hpp>
+#include <opencv2/highgui/highgui.hpp>
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <unistd.h>
-#include <opencv2/opencv.hpp>
+#include <string.h>
 
-void receiveVideo(int serverPort) 
+using namespace std;
+using namespace cv;
+
+int main() 
 {
-    int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
-    if (sockfd < 0) 
+    // Create a socket
+    int sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sockfd == -1) 
     {
-        std::cerr << "Failed to create socket" << std::endl;
-        return;
+        cerr << "Failed to create socket" << endl;
+        return -1;
     }
 
-    struct sockaddr_in serverAddr;
-    memset(&serverAddr, 0, sizeof(serverAddr));
+    // Set up server address
+    sockaddr_in serverAddr;
     serverAddr.sin_family = AF_INET;
-    serverAddr.sin_port = htons(serverPort);
-    serverAddr.sin_addr.s_addr = INADDR_ANY;
+    serverAddr.sin_port = htons(8000); // Replace with the desired port number
+    serverAddr.sin_addr.s_addr = inet_addr("127.0.0.1"); // Replace with the server IP address
 
-    if (bind(sockfd, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) < 0) 
+    // Connect to the server
+    if (connect(sockfd, (sockaddr*)&serverAddr, sizeof(serverAddr)) == -1) 
     {
-        std::cerr << "Failed to bind socket" << std::endl;
-        close(sockfd);
-        return;
+        cerr << "Failed to connect to server" << endl;
+        return -1;
     }
 
-    cv::Mat frame;
-    std::vector<uchar> buffer(65536);
+    // Create a window to display the video
+    namedWindow("Video", WINDOW_NORMAL);
+
+    // Receive and display video frames
     while (true) 
     {
-        socklen_t addrLen = sizeof(serverAddr);
-        int bytesReceived = recvfrom(sockfd, buffer.data(), buffer.size(), 0,(struct sockaddr*)&serverAddr, &addrLen);
-        if (bytesReceived < 0) 
+        // Receive the frame size
+        int frameSize;
+        recv(sockfd, &frameSize, sizeof(frameSize), 0);
+
+        // Receive the frame data
+        vector<uchar> frameData(frameSize);
+        int bytesReceived = 0;
+        while (bytesReceived < frameSize) 
         {
-            std::cerr << "Failed to receive data" << std::endl;
+            int result = recv(sockfd, frameData.data() + bytesReceived, frameSize - bytesReceived, 0);
+            if (result == -1) 
+            {
+                cerr << "Failed to receive frame data" << endl;
+                break;
+            }
+            bytesReceived += result;
+        }
+
+        // Create a Mat object from the received data
+        Mat frame = imdecode(frameData, IMREAD_COLOR);
+
+        // Display the frame
+        imshow("Video", frame);
+
+        // Check for user input (press 'q' to quit)
+        char key = waitKey(1);
+        if (key == 'q') 
+        {
             break;
         }
-
-        frame = cv::imdecode(cv::Mat(buffer.data(), 1, bytesReceived, CV_8UC1), cv::IMREAD_COLOR);
-        if (frame.empty()) 
-        {
-            std::cerr << "Failed to decode frame" << std::endl;
-            continue;
-        }
-
-        cv::imshow("Video Stream", frame);
-        if (cv::waitKey(30) >= 0) break;
     }
 
+    // Close the socket
     close(sockfd);
-    cv::destroyAllWindows();
-}
 
-void main()
-{
-  receiveVideo(2556); 
+    return 0;
 }
